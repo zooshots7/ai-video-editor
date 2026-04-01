@@ -281,6 +281,30 @@ const CAPTION_STYLES: Record<string, any> = {
   },
 };
 
+// Music library for mood-based selection
+const MUSIC_TRACKS: Record<string, { id: string; name: string; src: string; mood: string; duckedVolume: number }> = {
+  "chill-lofi": { id: "music-chill-lofi", name: "Chill Lo-fi", src: "/music/chill-lofi.mp3", mood: "calm", duckedVolume: 10 },
+  "upbeat-energy": { id: "music-upbeat-energy", name: "Upbeat Energy", src: "/music/upbeat-energy.mp3", mood: "energetic", duckedVolume: 8 },
+  "corporate-calm": { id: "music-corporate-calm", name: "Corporate Calm", src: "/music/corporate-calm.mp3", mood: "professional", duckedVolume: 8 },
+  "dramatic-cinematic": { id: "music-dramatic-cinematic", name: "Dramatic Cinematic", src: "/music/dramatic-cinematic.mp3", mood: "dramatic", duckedVolume: 10 },
+  "tech-modern": { id: "music-tech-modern", name: "Tech Modern", src: "/music/tech-modern.mp3", mood: "energetic", duckedVolume: 7 },
+  "inspiring": { id: "music-inspiring", name: "Inspiring", src: "/music/inspiring.mp3", mood: "inspiring", duckedVolume: 9 },
+};
+
+const MOOD_TO_MUSIC_KEY: Record<string, string> = {
+  calm: "chill-lofi", relaxed: "chill-lofi", chill: "chill-lofi",
+  energetic: "upbeat-energy", exciting: "upbeat-energy", hype: "upbeat-energy",
+  professional: "corporate-calm", corporate: "corporate-calm", business: "corporate-calm",
+  dramatic: "dramatic-cinematic", serious: "dramatic-cinematic", intense: "dramatic-cinematic",
+  techy: "tech-modern", tech: "tech-modern", modern: "tech-modern",
+  inspiring: "inspiring", motivational: "inspiring", uplifting: "inspiring",
+};
+
+function selectMusicForMood(mood: string): typeof MUSIC_TRACKS[string] | null {
+  const key = MOOD_TO_MUSIC_KEY[mood.toLowerCase()] || "chill-lofi";
+  return MUSIC_TRACKS[key] || null;
+}
+
 // Build the design JSON
 function buildDesign(
   videoSrc: string,
@@ -288,7 +312,8 @@ function buildDesign(
   words: Word[],
   editPlan: EditPlan,
   brollMap: Map<string, PexelsVideo>,
-  captionStyleId: string = "bold-highlight"
+  captionStyleId: string = "bold-highlight",
+  musicTrack: typeof MUSIC_TRACKS[string] | null = null
 ) {
   const designId = generateId();
   const mainVideoId = generateId();
@@ -450,6 +475,28 @@ function buildDesign(
     });
   }
 
+  // Background music track — ducked volume since narrator is always talking
+  if (musicTrack) {
+    const musicId = generateId();
+    // Music plays for the full video duration at ducked volume
+    trackItemsMap[musicId] = {
+      id: musicId, type: "audio", name: `Music: ${musicTrack.name}`, playbackRate: 1,
+      details: {
+        src: musicTrack.src,
+        volume: musicTrack.duckedVolume, // Auto-ducked for narration
+      },
+      trim: { from: 0, to: videoDurationMs },
+      display: { from: 0, to: videoDurationMs },
+      duration: videoDurationMs, isMain: false,
+      metadata: { musicId: musicTrack.id, mood: musicTrack.mood, isDucked: true },
+    };
+    trackItemIds.push(musicId);
+    tracks.push({
+      id: generateId(), items: [musicId], type: "audio",
+      name: "Background Music", accepts: ["audio"], magnetic: false, static: false,
+    });
+  }
+
   return {
     id: designId, fps: 30, tracks,
     size: { width: 1080, height: 1920 },
@@ -525,7 +572,10 @@ export async function POST(request: Request) {
     }
 
     // Step 4: Build design
-    const design = buildDesign(videoSrc, actualDurationMs, transcript.words, editPlan, brollMap, captionStyle || "bold-highlight");
+    // Select background music based on the LLM's mood assessment
+    const musicTrack = selectMusicForMood(editPlan.overall_mood || "calm");
+
+    const design = buildDesign(videoSrc, actualDurationMs, transcript.words, editPlan, brollMap, captionStyle || "bold-highlight", musicTrack);
 
     return NextResponse.json({
       design,
