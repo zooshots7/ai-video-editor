@@ -168,17 +168,26 @@ export default function Navbar({
   );
 }
 
+const CAPTION_STYLE_OPTIONS = [
+  { id: "bold-highlight", name: "Bold Highlight", desc: "Yellow active word" },
+  { id: "neon-pop", name: "Neon Pop", desc: "Green neon + purple fill" },
+  { id: "clean-minimal", name: "Clean Minimal", desc: "Dark on light pill" },
+  { id: "fire-orange", name: "Fire Orange", desc: "Orange highlight box" },
+  { id: "shadow-glow", name: "Shadow Glow", desc: "Cinematic glow" },
+  { id: "red-bold", name: "Red Bold", desc: "Red active word" },
+];
+
 const AiAutoEditButton = ({
   stateManager,
 }: {
   stateManager: StateManager;
 }) => {
-  const { isProcessing, status, error, setProcessing, setStatus, setError, reset } =
+  const { isProcessing, status, error, captionStyle, setProcessing, setStatus, setError, setCaptionStyle, reset } =
     useAiEditStore();
   const isMediumScreen = useIsMediumScreen();
+  const [open, setOpen] = useState(false);
 
   const handleAiEdit = async () => {
-    // Find the first video item on the timeline
     const state = stateManager.toJSON();
     const videoItem = Object.values(state.trackItemsMap || {}).find(
       (item: any) => item.type === "video" && item.details?.src
@@ -189,6 +198,7 @@ const AiAutoEditButton = ({
       return;
     }
 
+    setOpen(false);
     reset();
     setProcessing(true);
     setStatus("Extracting audio & transcribing...");
@@ -201,6 +211,7 @@ const AiAutoEditButton = ({
           videoSrc: videoItem.details.src,
           videoDurationMs: videoItem.duration || (videoItem.display?.to - videoItem.display?.from),
           videoItemId: videoItem.id,
+          captionStyle,
         }),
       });
 
@@ -231,26 +242,59 @@ const AiAutoEditButton = ({
 
   return (
     <>
-      <Button
-        className="flex h-8 gap-1.5 rounded-full bg-violet-600 hover:bg-violet-700 text-white border-0"
-        size={isMediumScreen ? "sm" : "icon"}
-        onClick={handleAiEdit}
-        disabled={isProcessing}
-      >
-        {isProcessing ? (
-          <>
-            <Loader2 width={16} className="animate-spin" />
-            <span className="hidden md:block text-xs">{status || "Processing..."}</span>
-          </>
-        ) : (
-          <>
-            <Sparkles width={16} />
-            <span className="hidden md:block">AI Auto-Edit</span>
-          </>
-        )}
-      </Button>
-      {error && !isProcessing && (
-        <span className="text-xs text-red-400 max-w-[200px] truncate">{error}</span>
+      {isProcessing ? (
+        <Button
+          className="flex h-8 gap-1.5 rounded-full bg-violet-600 text-white border-0"
+          size={isMediumScreen ? "sm" : "icon"}
+          disabled
+        >
+          <Loader2 width={16} className="animate-spin" />
+          <span className="hidden md:block text-xs">{status || "Processing..."}</span>
+        </Button>
+      ) : (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              className="flex h-8 gap-1.5 rounded-full bg-violet-600 hover:bg-violet-700 text-white border-0"
+              size={isMediumScreen ? "sm" : "icon"}
+            >
+              <Sparkles width={16} />
+              <span className="hidden md:block">AI Auto-Edit</span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="end"
+            className="bg-sidebar z-[250] flex w-72 flex-col gap-3 p-4"
+          >
+            <div className="font-semibold text-sm">Caption Style</div>
+            <div className="grid grid-cols-2 gap-2">
+              {CAPTION_STYLE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => setCaptionStyle(opt.id)}
+                  className={`flex flex-col gap-0.5 p-2 rounded-lg border text-left transition-colors ${
+                    captionStyle === opt.id
+                      ? "border-violet-500 bg-violet-500/10"
+                      : "border-border hover:border-violet-500/50"
+                  }`}
+                >
+                  <span className="text-xs font-medium">{opt.name}</span>
+                  <span className="text-[10px] text-muted-foreground">{opt.desc}</span>
+                </button>
+              ))}
+            </div>
+            {error && (
+              <p className="text-xs text-red-400">{error}</p>
+            )}
+            <Button
+              onClick={handleAiEdit}
+              className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              Auto-Edit Video
+            </Button>
+          </PopoverContent>
+        </Popover>
       )}
     </>
   );

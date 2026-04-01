@@ -238,13 +238,57 @@ async function fetchBroll(
   return data.videos[Math.floor(Math.random() * data.videos.length)];
 }
 
+// Caption preset styles (matches src/features/editor/data/caption-presets.ts)
+const CAPTION_STYLES: Record<string, any> = {
+  "bold-highlight": {
+    appearedColor: "#FFFFFF", activeColor: "#FFD700", activeFillColor: "transparent",
+    color: "#FFFFFF", backgroundColor: "transparent", borderColor: "#000000", borderWidth: 0,
+    boxShadow: { color: "#000000", x: 2, y: 2, blur: 8 },
+    fontFamily: "Inter", fontUrl: "https://fonts.gstatic.com/s/inter/v18/UcCo3FwrK3iLTcviYwY.woff2",
+    textTransform: "uppercase", fontSize: 58,
+  },
+  "neon-pop": {
+    appearedColor: "#FFFFFF", activeColor: "#50FF12", activeFillColor: "#7E12FF",
+    color: "#DADADA", backgroundColor: "transparent", borderColor: "#000000", borderWidth: 5,
+    fontFamily: "Bangers-Regular", fontUrl: "https://fonts.gstatic.com/s/bangers/v13/FeVQS0BTqb0h60ACL5la2bxii28.ttf",
+    textTransform: "uppercase", fontSize: 64,
+  },
+  "clean-minimal": {
+    appearedColor: "#000000", activeColor: "#000000", activeFillColor: "transparent",
+    color: "#666666", backgroundColor: "#F0F0F0", borderColor: "transparent", borderWidth: 0,
+    fontFamily: "Inter", fontUrl: "https://fonts.gstatic.com/s/inter/v18/UcCo3FwrK3iLTcviYwY.woff2",
+    textTransform: "none", fontSize: 52,
+  },
+  "fire-orange": {
+    appearedColor: "#FFFFFF", activeColor: "#FFFFFF", activeFillColor: "#FF6B00",
+    color: "#FFFFFF", backgroundColor: "transparent", borderColor: "#000000", borderWidth: 5,
+    fontFamily: "Bangers-Regular", fontUrl: "https://fonts.gstatic.com/s/bangers/v13/FeVQS0BTqb0h60ACL5la2bxii28.ttf",
+    textTransform: "uppercase", fontSize: 62,
+  },
+  "shadow-glow": {
+    appearedColor: "#FFFFFF", activeColor: "#FFFFFF", activeFillColor: "transparent",
+    color: "#FFFFFF", backgroundColor: "transparent", borderColor: "#000000", borderWidth: 8,
+    boxShadow: { color: "#FFFFFF", x: 0, y: 0, blur: 40 },
+    fontFamily: "Inter", fontUrl: "https://fonts.gstatic.com/s/inter/v18/UcCo3FwrK3iLTcviYwY.woff2",
+    textTransform: "none", fontSize: 56,
+  },
+  "red-bold": {
+    appearedColor: "#FFFFFF", activeColor: "#FF0000", activeFillColor: "transparent",
+    color: "#FFFFFF", backgroundColor: "transparent", borderColor: "#000000", borderWidth: 3,
+    boxShadow: { color: "#000000", x: 2, y: 2, blur: 6 },
+    fontFamily: "Inter", fontUrl: "https://fonts.gstatic.com/s/inter/v18/UcCo3FwrK3iLTcviYwY.woff2",
+    textTransform: "uppercase", fontSize: 60,
+  },
+};
+
 // Build the design JSON
 function buildDesign(
   videoSrc: string,
   videoDurationMs: number,
   words: Word[],
   editPlan: EditPlan,
-  brollMap: Map<string, PexelsVideo>
+  brollMap: Map<string, PexelsVideo>,
+  captionStyleId: string = "bold-highlight"
 ) {
   const designId = generateId();
   const mainVideoId = generateId();
@@ -318,7 +362,8 @@ function buildDesign(
     });
   }
 
-  // Caption track
+  // Caption track — apply selected style
+  const style = CAPTION_STYLES[captionStyleId] || CAPTION_STYLES["bold-highlight"];
   const captionItems: string[] = [];
   const WORDS_PER_CAPTION = 4;
   for (let i = 0; i < words.length; i += WORDS_PER_CAPTION) {
@@ -333,11 +378,18 @@ function buildDesign(
       id, name: "caption", type: "caption",
       display: { from: startMs, to: endMs },
       details: {
-        appearedColor: "#FFFFFF", activeColor: "#FFD700",
-        activeFillColor: "transparent", color: "#FFFFFF",
-        backgroundColor: "transparent", borderColor: "#000000", borderWidth: 0,
-        text, fontSize: 58, width: 900, fontFamily: "Inter",
-        fontUrl: "https://fonts.gstatic.com/s/inter/v18/UcCo3FwrK3iLTcviYwY.woff2",
+        appearedColor: style.appearedColor,
+        activeColor: style.activeColor,
+        activeFillColor: style.activeFillColor,
+        color: style.color,
+        backgroundColor: style.backgroundColor,
+        borderColor: style.borderColor,
+        borderWidth: style.borderWidth,
+        text,
+        fontSize: style.fontSize || 58,
+        width: 900,
+        fontFamily: style.fontFamily || "Inter",
+        fontUrl: style.fontUrl || "https://fonts.gstatic.com/s/inter/v18/UcCo3FwrK3iLTcviYwY.woff2",
         textAlign: "center", linesPerCaption: 1,
         words: chunk.map((w) => ({
           word: w.word, start: w.start * 1000, end: w.end * 1000,
@@ -348,9 +400,10 @@ function buildDesign(
         border: "none", textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
         opacity: 100, wordWrap: "normal", wordBreak: "normal",
         WebkitTextStrokeColor: "#000000", WebkitTextStrokeWidth: "1px",
-        top: "1400px", left: "90px", textTransform: "uppercase",
+        top: "1400px", left: "90px",
+        textTransform: style.textTransform || "uppercase",
         transform: "none", skewX: 0, skewY: 0, height: 80,
-        boxShadow: { color: "#000000", x: 0, y: 0, blur: 0 },
+        boxShadow: style.boxShadow || { color: "#000000", x: 0, y: 0, blur: 0 },
         isKeywordColor: "transparent", preservedColorKeyWord: false,
         wordsPerLine: "punctuationOrPause",
       },
@@ -407,7 +460,7 @@ function buildDesign(
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { videoSrc, videoDurationMs } = body;
+    const { videoSrc, videoDurationMs, captionStyle } = body;
 
     if (!videoSrc || !videoDurationMs) {
       return NextResponse.json(
@@ -472,7 +525,7 @@ export async function POST(request: Request) {
     }
 
     // Step 4: Build design
-    const design = buildDesign(videoSrc, actualDurationMs, transcript.words, editPlan, brollMap);
+    const design = buildDesign(videoSrc, actualDurationMs, transcript.words, editPlan, brollMap, captionStyle || "bold-highlight");
 
     return NextResponse.json({
       design,
