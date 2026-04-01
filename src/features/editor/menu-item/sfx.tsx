@@ -1,188 +1,181 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
-import { AudioItem } from "./audio-item";
-import { Search, Loader2, Music2 } from "lucide-react";
+import { useState, useRef, useCallback } from "react";
+import { Play, Pause, Plus, Volume2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { debounce } from "lodash";
 import { Button } from "@/components/ui/button";
 import { generateId } from "@designcombo/timeline";
 import { dispatch } from "@designcombo/events";
 import { ADD_AUDIO } from "@designcombo/state";
-import { IAudio } from "@designcombo/types";
-import { Input } from "@/components/ui/input";
+import { SFX_LIBRARY, SFX_CATEGORIES, type SfxItem } from "../data/sfx";
+import { cn } from "@/lib/utils";
+
+function SfxCard({
+  sfx,
+  isPlaying,
+  onTogglePlay,
+  onAdd,
+}: {
+  sfx: SfxItem;
+  isPlaying: boolean;
+  onTogglePlay: (id: string) => void;
+  onAdd: (sfx: SfxItem) => void;
+}) {
+  const categoryColors: Record<string, string> = {
+    transition: "bg-blue-500/20 text-blue-400",
+    emphasis: "bg-amber-500/20 text-amber-400",
+    ui: "bg-green-500/20 text-green-400",
+    mood: "bg-purple-500/20 text-purple-400",
+  };
+
+  return (
+    <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 group transition-colors">
+      <button
+        onClick={() => onTogglePlay(sfx.id)}
+        className="flex-none w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+      >
+        {isPlaying ? (
+          <Pause className="w-3.5 h-3.5" />
+        ) : (
+          <Play className="w-3.5 h-3.5 ml-0.5" />
+        )}
+      </button>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium truncate">{sfx.name}</span>
+          <span
+            className={cn(
+              "text-[10px] px-1.5 py-0.5 rounded-full flex-none",
+              categoryColors[sfx.category] || "bg-white/10 text-white/60"
+            )}
+          >
+            {sfx.category}
+          </span>
+        </div>
+        <span className="text-xs text-muted-foreground">
+          {sfx.durationMs < 100
+            ? `${sfx.durationMs}ms`
+            : `${(sfx.durationMs / 1000).toFixed(1)}s`}
+        </span>
+      </div>
+
+      <Button
+        size="icon"
+        variant="ghost"
+        className="flex-none h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+        onClick={() => onAdd(sfx)}
+      >
+        <Plus className="w-4 h-4" />
+      </Button>
+    </div>
+  );
+}
 
 export function SFX() {
   const [playingId, setPlayingId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<IAudio[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isMoreLoading, setIsMoreLoading] = useState(false);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<string>("all");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const fetchSFX = async (query: string, pageNumber: number = 1) => {
-    if (pageNumber === 1) {
-      setIsLoading(true);
-    } else {
-      setIsMoreLoading(true);
-    }
-
-    try {
-      const response = await fetch("/api/audio/sfx", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          limit: 30,
-          page: pageNumber,
-          query: query ? { keys: [query] } : {}
-        })
-      });
-      const data = await response.json();
-      if (data.soundEffects) {
-        const mappedSFX = data.soundEffects.map((sfx: any) => ({
-          id: sfx.id,
-          details: {
-            src: sfx.src
-          },
-          name: sfx.name,
-          type: sfx.type,
-          metadata: {
-            author: sfx.description || ""
-          }
-        }));
-        if (pageNumber === 1) {
-          setSearchResults(mappedSFX);
-        } else {
-          setSearchResults((prev: IAudio[]) => [...prev, ...mappedSFX]);
-        }
-        setHasMore(data.pagination?.hasMore || false);
-      } else {
-        if (pageNumber === 1) {
-          setSearchResults([]);
-        }
-        setHasMore(false);
+  const handleTogglePlay = useCallback(
+    (id: string) => {
+      if (playingId === id) {
+        audioRef.current?.pause();
+        setPlayingId(null);
+        return;
       }
-    } catch (error) {
-      console.error("Failed to fetch SFX:", error);
-    } finally {
-      setIsLoading(false);
-      setIsMoreLoading(false);
-    }
-  };
 
-  const debouncedFetch = useCallback(
-    debounce((query: string) => {
-      setPage(1);
-      fetchSFX(query, 1);
-    }, 500),
-    []
+      const sfx = SFX_LIBRARY.find((s) => s.id === id);
+      if (!sfx) return;
+
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+
+      const audio = new Audio(sfx.src);
+      audio.volume = 0.5;
+      audio.onended = () => setPlayingId(null);
+      audio.play();
+      audioRef.current = audio;
+      setPlayingId(id);
+    },
+    [playingId]
   );
-  useEffect(() => {
-    fetchSFX("");
+
+  const handleAddSfx = useCallback((sfx: SfxItem) => {
+    dispatch(ADD_AUDIO, {
+      payload: {
+        id: generateId(),
+        type: "audio",
+        details: {
+          src: sfx.src,
+          volume: 80,
+        },
+        name: `SFX: ${sfx.name}`,
+        metadata: {
+          sfxName: sfx.name,
+          category: sfx.category,
+        },
+      },
+      options: {},
+    });
   }, []);
 
-  const handleAddAudio = (payload: Partial<IAudio>) => {
-    payload.id = generateId();
-    console.log(payload);
-    dispatch(ADD_AUDIO, {
-      payload,
-      options: {}
-    });
-  };
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const query = e.target.value;
-    setSearchQuery(query);
-    debouncedFetch(query);
-  };
-
-  const loadMore = () => {
-    const nextPage = page + 1;
-    setPage(nextPage);
-    fetchSFX(searchQuery, nextPage);
-  };
-
-  const uniqueResults = Array.from(
-    new Map(searchResults.map((item: IAudio) => [item.id, item])).values()
-  );
+  const filteredSfx =
+    activeCategory === "all"
+      ? SFX_LIBRARY
+      : SFX_LIBRARY.filter((s) => s.category === activeCategory);
 
   return (
     <div className="flex flex-1 flex-col max-w-full h-full">
-      <div className="flex items-center gap-2 p-4">
-        <div className="relative flex-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="absolute left-1 top-1/2 h-6 w-6 -translate-y-1/2 p-0"
-            onClick={() => fetchSFX(searchQuery)}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Search className="h-3 w-3" />
-            )}
-          </Button>
-          <Input
-            placeholder="Search sound effects..."
-            value={searchQuery}
-            onChange={handleSearchChange}
-            onKeyPress={(e) => {
-              if (e.key === "Enter") {
-                fetchSFX(searchQuery);
-              }
-            }}
-            className="pl-10"
-          />
-        </div>
-        {searchQuery && (
-          <Button
-            size="sm"
-            variant="outline"
-            // onClick={handleClearSearch}
-            disabled={isLoading}
-          >
-            Clear
-          </Button>
-        )}
+      <div className="flex items-center gap-1.5 px-4 py-3">
+        <Volume2 className="w-4 h-4 text-muted-foreground flex-none" />
+        <span className="text-sm font-medium">Sound Effects</span>
+        <span className="text-xs text-muted-foreground ml-auto">
+          {SFX_LIBRARY.length} sounds
+        </span>
       </div>
-      <ScrollArea className="flex-1  max-w-full px-4">
-        {isLoading && uniqueResults.length === 0 ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="animate-spin text-muted-foreground" size={32} />
-          </div>
-        ) : uniqueResults.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
-            <Music2 size={32} className="opacity-50" />
-            <span className="text-sm">No music found</span>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {uniqueResults.map((audio, index) => (
-              <AudioItem
-                onAdd={handleAddAudio}
-                item={audio}
-                key={index}
-                playingId={playingId}
-                setPlayingId={setPlayingId}
-              />
-            ))}
-          </div>
-        )}
 
-        {hasMore && uniqueResults.length > 0 && (
-          <div className="py-4 flex justify-center">
-            <Button
-              onClick={loadMore}
-              disabled={isMoreLoading}
-              className="bg-primary/60 hover:bg-primary/80"
-            >
-              {isMoreLoading && <Loader2 className="animate-spin" size={12} />}
-              Load More
-            </Button>
-          </div>
-        )}
+      {/* Category filter */}
+      <div className="flex gap-1 px-4 pb-2 flex-wrap">
+        <button
+          onClick={() => setActiveCategory("all")}
+          className={cn(
+            "text-xs px-2.5 py-1 rounded-full transition-colors",
+            activeCategory === "all"
+              ? "bg-white/15 text-white"
+              : "bg-white/5 text-muted-foreground hover:bg-white/10"
+          )}
+        >
+          All
+        </button>
+        {SFX_CATEGORIES.map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setActiveCategory(cat)}
+            className={cn(
+              "text-xs px-2.5 py-1 rounded-full transition-colors capitalize",
+              activeCategory === cat
+                ? "bg-white/15 text-white"
+                : "bg-white/5 text-muted-foreground hover:bg-white/10"
+            )}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      <ScrollArea className="flex-1 px-2">
+        <div className="flex flex-col gap-0.5 pb-4">
+          {filteredSfx.map((sfx) => (
+            <SfxCard
+              key={sfx.id}
+              sfx={sfx}
+              isPlaying={playingId === sfx.id}
+              onTogglePlay={handleTogglePlay}
+              onAdd={handleAddSfx}
+            />
+          ))}
+        </div>
       </ScrollArea>
     </div>
   );

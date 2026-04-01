@@ -30,9 +30,25 @@ interface EditPlan {
     broll_start_ms: number | null;
     broll_end_ms: number | null;
     transition: string | null;
+    sfx: string | null;
+    sfx_at_ms: number | null;
   }>;
   overall_mood: string;
 }
+
+// SFX library available for the LLM to pick from
+const SFX_LIBRARY: Record<string, { src: string; durationMs: number }> = {
+  whoosh: { src: "/sfx/whoosh.mp3", durationMs: 400 },
+  transition: { src: "/sfx/transition.mp3", durationMs: 700 },
+  "swoosh-reverse": { src: "/sfx/swoosh-reverse.mp3", durationMs: 400 },
+  pop: { src: "/sfx/pop.mp3", durationMs: 80 },
+  ding: { src: "/sfx/ding.mp3", durationMs: 300 },
+  boom: { src: "/sfx/boom.mp3", durationMs: 500 },
+  rise: { src: "/sfx/rise.mp3", durationMs: 600 },
+  chime: { src: "/sfx/chime.mp3", durationMs: 300 },
+  click: { src: "/sfx/click.mp3", durationMs: 30 },
+  blip: { src: "/sfx/blip.mp3", durationMs: 50 },
+};
 
 interface PexelsVideoFile {
   id: number;
@@ -141,16 +157,32 @@ VIDEO DURATION: ${(videoDurationMs / 1000).toFixed(1)} seconds
 TRANSCRIPT SEGMENTS:
 ${segmentsInfo}
 
+AVAILABLE SFX (use exact names):
+- "whoosh" — quick swoosh for scene transitions (400ms)
+- "transition" — longer cinematic swoosh (700ms)
+- "swoosh-reverse" — reverse swoosh for transition out (400ms)
+- "pop" — short pop for text/element appear (80ms)
+- "ding" — bell for highlights or key points (300ms)
+- "boom" — low impact for dramatic emphasis (500ms)
+- "rise" — ascending tone for build-up (600ms)
+- "chime" — two-tone notification (300ms)
+- "click" — subtle click (30ms)
+- "blip" — quick blip for text appear (50ms)
+
 For each segment, decide:
-1. Whether to insert B-roll footage (search query for Pexels). Only add B-roll for segments that reference visual concepts, actions, or objects. Skip B-roll for intro greetings, filler, or abstract statements.
-2. B-roll timing - when to show it (start_ms and end_ms) within the segment. B-roll should be 2-5 seconds max.
-3. What transition to use before the B-roll (one of: "crossfade", "slide-left", "slide-right", "zoom-in", "none").
+1. Whether to insert B-roll footage (search query for Pexels). Only add B-roll for segments that reference visual concepts, actions, or objects.
+2. B-roll timing (start_ms and end_ms). B-roll should be 2-5 seconds max.
+3. Transition type (one of: "crossfade", "slide-left", "slide-right", "zoom-in", "none").
+4. Whether to add an SFX. Use "whoosh"/"transition" for B-roll transitions, "pop"/"ding" for emphasis points, "boom" for dramatic moments.
+5. SFX timing (sfx_at_ms) — when the SFX should play within the segment.
 
 RULES:
-- Add B-roll to roughly 30-50% of segments, not all
+- Add B-roll to roughly 30-50% of segments
 - B-roll queries should be specific and visual (e.g. "person typing laptop" not "technology")
+- Add SFX to 40-60% of segments — every B-roll transition should have a whoosh/transition SFX
+- Also add emphasis SFX (pop, ding, boom) at key points even without B-roll
+- Don't overdo SFX — leave some segments clean
 - All times in milliseconds
-- Keep B-roll clips short (2-4 seconds)
 
 Return JSON only, no markdown:
 {
@@ -162,7 +194,9 @@ Return JSON only, no markdown:
       "broll_query": "search query" or null,
       "broll_start_ms": 1000 or null,
       "broll_end_ms": 3000 or null,
-      "transition": "crossfade" or null
+      "transition": "crossfade" or null,
+      "sfx": "whoosh" or null,
+      "sfx_at_ms": 1000 or null
     }
   ],
   "overall_mood": "energetic/calm/professional/etc"
@@ -331,6 +365,37 @@ function buildDesign(
     id: generateId(), items: captionItems, type: "caption",
     name: "Captions", accepts: ["caption"], magnetic: false, static: false,
   });
+
+  // SFX track
+  const sfxItems: string[] = [];
+  for (const seg of editPlan.segments) {
+    if (!seg.sfx || seg.sfx_at_ms == null) continue;
+    const sfxDef = SFX_LIBRARY[seg.sfx.toLowerCase()];
+    if (!sfxDef) continue;
+
+    const id = generateId();
+    const dur = sfxDef.durationMs;
+    trackItemsMap[id] = {
+      id, type: "audio", name: `SFX: ${seg.sfx}`, playbackRate: 1,
+      details: {
+        src: sfxDef.src,
+        volume: 80,
+      },
+      trim: { from: 0, to: dur },
+      display: { from: seg.sfx_at_ms, to: seg.sfx_at_ms + dur },
+      duration: dur, isMain: false,
+      metadata: { sfxName: seg.sfx },
+    };
+    trackItemIds.push(id);
+    sfxItems.push(id);
+  }
+
+  if (sfxItems.length > 0) {
+    tracks.push({
+      id: generateId(), items: sfxItems, type: "audio",
+      name: "SFX", accepts: ["audio"], magnetic: false, static: false,
+    });
+  }
 
   return {
     id: designId, fps: 30, tracks,
