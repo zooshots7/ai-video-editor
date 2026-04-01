@@ -284,11 +284,15 @@ const Timeline = ({ stateManager }: { stateManager: StateManager }) => {
         />
         <div style={{ height: canvasSize.height }} className="relative flex-1">
           <div
-            style={{ height: canvasSize.height }}
+            style={{ height: canvasSize.height, willChange: "transform" }}
             ref={containerRef}
             className="absolute top-0 w-full"
           >
-            <canvas id="designcombo-timeline-canvas" ref={canvasElRef} />
+            <canvas
+              id="designcombo-timeline-canvas"
+              ref={canvasElRef}
+              style={{ willChange: "contents" }}
+            />
           </div>
         </div>
       </div>

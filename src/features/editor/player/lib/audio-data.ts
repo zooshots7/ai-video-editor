@@ -31,16 +31,9 @@ export class AudioDataManager {
       };
       this.cleanupCache();
     } catch (error) {
-      console.error(`Error loading audio data for ${src}:`, error);
-
-      // If it's an EncodingError (no audio track), just ignore it
-      if (error instanceof Error && error.name === "EncodingError") {
-        console.log(`No audio track found for ${src}, ignoring`);
-        return;
-      }
-
-      // For other errors, still throw them
-      throw error;
+      // Silently ignore audio decode failures — common for video-only files
+      // (Pexels B-roll, screen recordings, etc.)
+      return;
     }
   }
 

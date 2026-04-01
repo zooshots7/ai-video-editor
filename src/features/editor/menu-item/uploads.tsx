@@ -8,12 +8,75 @@ import {
   Video as VideoIcon,
   Loader2,
   UploadIcon,
-  Upload
+  Upload,
+  Play
 } from "lucide-react";
 import { generateId } from "@designcombo/timeline";
 import { Button } from "@/components/ui/button";
 import useUploadStore from "../store/use-upload-store";
 import ModalUpload from "@/components/modal-upload";
+import { useEffect, useRef, useState, useCallback } from "react";
+
+// Generate a thumbnail from a video URL using canvas
+function useVideoThumbnail(videoUrl: string | undefined) {
+  const [thumbnail, setThumbnail] = useState<string>("");
+
+  useEffect(() => {
+    if (!videoUrl) return;
+    const video = document.createElement("video");
+    video.crossOrigin = "anonymous";
+    video.muted = true;
+    video.preload = "metadata";
+
+    video.onloadeddata = () => {
+      video.currentTime = Math.min(1, video.duration * 0.1);
+    };
+
+    video.onseeked = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = 160;
+        canvas.height = 90;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          setThumbnail(canvas.toDataURL("image/jpeg", 0.7));
+        }
+      } catch { /* cross-origin or other errors */ }
+      video.remove();
+    };
+
+    video.onerror = () => video.remove();
+    video.src = videoUrl;
+
+    return () => { video.remove(); };
+  }, [videoUrl]);
+
+  return thumbnail;
+}
+
+function VideoThumbnailCard({ video, onClick }: { video: any; onClick: () => void }) {
+  const srcVideo = video.metadata?.uploadedUrl || video.filePath || video.url;
+  const thumb = useVideoThumbnail(srcVideo);
+
+  return (
+    <Card
+      className="w-full aspect-video flex items-center justify-center overflow-hidden relative cursor-pointer group"
+      onClick={onClick}
+    >
+      {thumb ? (
+        <>
+          <img src={thumb} alt="" className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+            <Play className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
+        </>
+      ) : (
+        <VideoIcon className="w-8 h-8 text-muted-foreground" />
+      )}
+    </Card>
+  );
+}
 
 export const Uploads = () => {
   const { setShowUploadModal, uploads, pendingUploads, activeUploads } =
@@ -31,7 +94,7 @@ export const Uploads = () => {
   );
 
   const handleAddVideo = (video: any) => {
-    const srcVideo = video.metadata?.uploadedUrl || video.url;
+    const srcVideo = video.metadata?.uploadedUrl || video.filePath || video.url;
 
     dispatch(ADD_VIDEO, {
       payload: {
@@ -40,7 +103,7 @@ export const Uploads = () => {
           src: srcVideo
         },
         metadata: {
-          previewUrl: ""
+          previewUrl: srcVideo
         }
       },
       options: {
@@ -160,21 +223,19 @@ export const Uploads = () => {
               <VideoIcon className="w-4 h-4 text-muted-foreground" />
               <span className="font-medium text-sm">Videos</span>
             </div>
-            <ScrollArea className="max-h-32">
-              <div className="grid grid-cols-3 gap-2 max-w-full">
+            <ScrollArea className="max-h-64">
+              <div className="grid grid-cols-2 gap-2 max-w-full">
                 {videos.map((video, idx) => (
                   <div
-                    className="flex items-center gap-2 flex-col w-full"
+                    className="flex items-center gap-1 flex-col w-full"
                     key={video.id || idx}
                   >
-                    <Card
-                      className="w-16 h-16 flex items-center justify-center overflow-hidden relative cursor-pointer"
+                    <VideoThumbnailCard
+                      video={video}
                       onClick={() => handleAddVideo(video)}
-                    >
-                      <VideoIcon className="w-8 h-8 text-muted-foreground" />
-                    </Card>
+                    />
                     <div className="text-xs text-muted-foreground truncate w-full text-center">
-                      {video.file?.name || video.url || "Video"}
+                      {video.fileName || "Video"}
                     </div>
                   </div>
                 ))}

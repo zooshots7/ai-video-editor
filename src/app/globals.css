@@ -600,3 +600,33 @@ input[type="number"]::-webkit-outer-spin-button {
 [data-slot="scroll-area-viewport"] > * {
   display: block !important;
 }
+
+/* Timeline smoothness */
+#timeline-container {
+  -webkit-overflow-scrolling: touch;
+  transform: translateZ(0);
+}
+
+#designcombo-timeline-canvas {
+  image-rendering: -webkit-optimize-contrast;
+}
+
+/* Smooth transitions for editor panels */
+.resizable-panel {
+  transition: none !important;
+}
+
+/* GPU-accelerated playhead */
+#playhead {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* Smooth scrolling in sidebar panels */
+.scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
